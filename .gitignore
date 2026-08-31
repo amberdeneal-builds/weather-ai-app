@@ -1,0 +1,45 @@
+# --- Terraform ---
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Real variable values often carry account-specific or sensitive data —
+# commit terraform.tfvars.example instead and keep this local.
+terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+.terraform.lock.hcl.bak
+
+# --- AWS / secrets ---
+.env
+.env.*
+*.pem
+*.key
+credentials
+.aws/
+
+# --- Lambda build artifacts ---
+src/**/__pycache__/
+src/**/*.pyc
+src/**/.venv/
+src/**/venv/
+src/**/node_modules/
+src/**/dist/
+src/**/build/
+*.zip
+package.zip
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

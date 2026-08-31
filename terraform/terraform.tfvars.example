@@ -1,0 +1,23 @@
+# Copy to terraform.tfvars (gitignored) and adjust for your account.
+# Every value below is also a working default in variables.tf — you only
+# need this file to override something.
+
+project_name = "weather-ai"
+environment  = "dev"
+aws_region   = "us-east-1"
+
+vpc_cidr              = "10.20.0.0/16"
+availability_zones    = ["us-east-1a", "us-east-1b"]
+private_subnet_cidrs  = ["10.20.1.0/24", "10.20.2.0/24"]
+
+# Interface VPC endpoints cost ~$0.01/hr each + data processing. Set false
+# for a $0 dry run of the network topology; the DynamoDB gateway endpoint
+# is always free and always created regardless of this flag.
+enable_interface_endpoints = true
+
+lambda_function_name = "weather-ai-api"
+dynamodb_table_name  = "weather-ai-cache"
+bedrock_model_id     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+secrets_name_prefix  = "weather-ai/"
+
+kms_key_deletion_window_days = 7
