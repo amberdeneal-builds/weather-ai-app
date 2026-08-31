@@ -6,6 +6,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    # Zips the Lambda source in src/ at plan/apply time - see lambda.tf.
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   # No remote backend yet — state is local for this lab. Before this is used

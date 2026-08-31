@@ -40,6 +40,12 @@ variable "enable_interface_endpoints" {
   default     = true
 }
 
+variable "enable_lambda_logs_endpoint" {
+  description = "Create just the CloudWatch Logs interface VPC endpoint, independent of enable_interface_endpoints. A VPC-attached Lambda function has no route to CloudWatch Logs without either this endpoint or a NAT Gateway, so its own execution logs won't be visible without one of the two. ~$0.01/hr (~$7/mo) alone - much cheaper than turning on all four interface endpoints just to get log visibility."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_function_name" {
   description = "Name the Lambda function will be deployed under. Used to scope the IAM role's CloudWatch Logs permissions to its exact log group before the function exists."
   type        = string

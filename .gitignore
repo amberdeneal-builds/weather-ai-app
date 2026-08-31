@@ -36,6 +36,8 @@ src/**/dist/
 src/**/build/
 *.zip
 package.zip
+terraform/.build/
+terraform/response.json
 
 # --- OS / editor ---
 .DS_Store

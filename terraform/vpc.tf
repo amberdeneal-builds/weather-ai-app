@@ -60,13 +60,24 @@ resource "aws_vpc_endpoint" "dynamodb" {
 # topology. KMS, Secrets Manager, and CloudWatch Logs are the services the
 # Lambda role actually calls; Bedrock Runtime is included so model calls
 # never leave the VPC either.
+#
+# "logs" can also be turned on by itself via enable_lambda_logs_endpoint,
+# independent of the other three — useful when you want to see Lambda's
+# execution logs without paying for the full set of interface endpoints.
+# merge() means turning on both flags doesn't create a duplicate endpoint;
+# the "logs" key just gets written once either way.
 locals {
-  interface_endpoint_services = var.enable_interface_endpoints ? {
-    kms             = "kms"
-    secretsmanager  = "secretsmanager"
-    logs            = "logs"
-    bedrock_runtime = "bedrock-runtime"
-  } : {}
+  interface_endpoint_services = merge(
+    var.enable_interface_endpoints ? {
+      kms             = "kms"
+      secretsmanager  = "secretsmanager"
+      logs            = "logs"
+      bedrock_runtime = "bedrock-runtime"
+    } : {},
+    var.enable_lambda_logs_endpoint ? {
+      logs = "logs"
+    } : {}
+  )
 }
 
 resource "aws_vpc_endpoint" "interface" {
@@ -181,24 +192,42 @@ resource "aws_network_acl_rule" "private_in_https" {
 }
 
 resource "aws_network_acl_rule" "private_in_ephemeral" {
-  # Return traffic for connections *this subnet* initiated outbound on 443.
+  # Return traffic for connections *this subnet* initiated outbound on 443 -
+  # including from the DynamoDB gateway endpoint (see the note on
+  # private_out_https below for why this can't be scoped to var.vpc_cidr).
   network_acl_id = aws_network_acl.private.id
   rule_number    = 110
   egress         = false
   protocol       = "tcp"
   rule_action    = "allow"
-  cidr_block     = var.vpc_cidr
+  cidr_block     = "0.0.0.0/0"
   from_port      = 1024
   to_port        = 65535
 }
 
 resource "aws_network_acl_rule" "private_out_https" {
+  # Gateway endpoints (DynamoDB, S3, ...) aren't ENIs with an address inside
+  # the VPC CIDR - they're a route-table entry pointing at AWS's own service
+  # IP ranges (a "managed prefix list"). Security groups can reference that
+  # prefix list directly (see lambda_egress_to_dynamodb_gateway above), but
+  # NACL rules can't reference prefix lists at all, only literal CIDRs - and
+  # looking the exact ranges up via a data source turned out to need three
+  # more IAM permissions on the deployer user than this lab's scope
+  # justified, just to read a public list of AWS's own IPs. So this rule
+  # (and private_in_ephemeral above, for the response) is 0.0.0.0/0 rather
+  # than var.vpc_cidr - the security groups above are doing the actual
+  # access-control work here (only 443, only to/from specific SGs and the
+  # DynamoDB prefix list); the NACL's real remaining job is protocol/port
+  # hygiene, which this still enforces. Scoping this precisely to DynamoDB's
+  # published range is a reasonable next tightening step if you want it -
+  # it needs ec2:DescribeManagedPrefixLists and ec2:GetManagedPrefixListEntries
+  # granted to terraform-deployer.
   network_acl_id = aws_network_acl.private.id
   rule_number    = 100
   egress         = true
   protocol       = "tcp"
   rule_action    = "allow"
-  cidr_block     = var.vpc_cidr
+  cidr_block     = "0.0.0.0/0"
   from_port      = 443
   to_port        = 443
 }
@@ -215,3 +244,4 @@ resource "aws_network_acl_rule" "private_out_ephemeral" {
   from_port      = 1024
   to_port        = 65535
 }
+
