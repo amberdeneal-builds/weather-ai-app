@@ -5,7 +5,7 @@
 # "any principal with secretsmanager:GetSecretValue in this account".
 
 data "aws_iam_policy_document" "kms_secrets_key_policy" {
-  # Account root always keeps administrative access to its own keys — this
+  # Account root always keeps administrative access to its own keys - this
   # is the standard AWS guardrail against a misconfigured policy locking
   # everyone (including account admins) out of the key.
   statement {
@@ -19,7 +19,28 @@ data "aws_iam_policy_document" "kms_secrets_key_policy" {
     resources = ["*"]
   }
 
-  # The Lambda execution role may only use the key for decryption — it never
+  # AWS validates, at CreateKey time, that the caller making the request
+  # will still be able to manage the key's policy afterwards - and it does
+  # NOT credit the root statement above toward that check for an IAM user
+  # or role, only for the literal root principal. Usage-focused managed
+  # policies (like AWSKeyManagementServicePowerUser) deliberately omit
+  # kms:PutKeyPolicy, since using a key and administering one are meant to
+  # be separate privileges. Without this statement naming the caller
+  # directly, CreateKey fails with MalformedPolicyDocumentException ("The
+  # new key policy will not allow you to update the key policy in the
+  # future") even though the root statement is present and correct.
+  statement {
+    sid    = "AllowCurrentCallerKeyAdministration"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      identifiers = [data.aws_caller_identity.current.arn]
+    }
+    actions   = ["kms:*"]
+    resources = ["*"]
+  }
+
+  # The Lambda execution role may only use the key for decryption - it never
   # needs kms:Encrypt, kms:CreateKey, kms:PutKeyPolicy, etc. Application code
   # reads secrets; it doesn't write them.
   statement {
