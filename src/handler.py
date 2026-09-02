@@ -38,6 +38,7 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200 if item else 500,
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps(item, default=str)
         if item
         else json.dumps({"error": "item not found after put_item"}),
