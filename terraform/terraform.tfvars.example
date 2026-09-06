@@ -15,14 +15,19 @@ private_subnet_cidrs  = ["10.20.1.0/24", "10.20.2.0/24"]
 # is always free and always created regardless of this flag.
 enable_interface_endpoints = true
 
-# Independent of the flag above: just the CloudWatch Logs endpoint, so a
-# VPC-attached Lambda's execution logs are visible even with everything
-# else off. ~$7/mo alone.
+# Independent of the flag above: just the CloudWatch Logs endpoint, needed
+# only if some future function in this VPC is VPC-attached and needs log
+# visibility without paying for the other three interface endpoints. The
+# current weather-ai-api Lambda is NOT VPC-attached (see lambda.tf), so it
+# reaches CloudWatch Logs over the public endpoint directly and doesn't
+# need this. ~$7/mo alone if turned on.
 enable_lambda_logs_endpoint = false
 
 lambda_function_name = "weather-ai-api"
 dynamodb_table_name  = "weather-ai-cache"
-bedrock_model_id     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+bedrock_model_id     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+bedrock_foundation_model_id         = "anthropic.claude-haiku-4-5-20251001-v1:0"
+bedrock_profile_destination_regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 secrets_name_prefix  = "weather-ai/"
 
 kms_key_deletion_window_days = 7

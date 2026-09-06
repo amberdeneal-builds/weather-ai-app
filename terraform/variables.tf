@@ -59,9 +59,21 @@ variable "dynamodb_table_name" {
 }
 
 variable "bedrock_model_id" {
-  description = "Bedrock foundation model ID the Lambda role is allowed to invoke."
+  description = "Bedrock model ID the Lambda invokes. This is a US geographic cross-Region inference profile ID (e.g. \"us.<model>\"), not a bare foundation-model ID - Claude Haiku 4.5 (the successor to Claude 3.5 Haiku, which hit its June 19, 2026 end-of-life) isn't offered for direct in-region invocation in us-east-1, only through a Geo or Global inference profile. Passed straight through to boto3's invoke_model(modelId=...) - profile IDs work exactly like model IDs there."
   type        = string
-  default     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "bedrock_foundation_model_id" {
+  description = "The underlying foundation-model ID behind bedrock_model_id's inference profile (same string with the geo prefix, e.g. \"us.\", stripped off). Needed separately because IAM permission for a cross-Region inference profile requires granting the profile ARN *and* the foundation-model ARN in every region the profile can route to (see bedrock_profile_destination_regions) - AWS checks both."
+  type        = string
+  default     = "anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "bedrock_profile_destination_regions" {
+  description = "Every AWS region bedrock_model_id's inference profile is allowed to route a request to. For the \"us.\" geographic profile this is the US region set Anthropic/AWS publish on the model's Bedrock model card - currently us-east-1, us-east-2, us-west-1, and us-west-2. Must stay in sync with whichever profile bedrock_model_id points at, or InvokeModel calls will fail with an IAM error whenever Bedrock happens to route to a region not in this list."
+  type        = list(string)
+  default     = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 }
 
 variable "secrets_name_prefix" {
@@ -74,4 +86,16 @@ variable "kms_key_deletion_window_days" {
   description = "Waiting period before a deleted KMS key is actually destroyed. AWS minimum/default is 30; keep it short in dev, longer in prod."
   type        = number
   default     = 7
+}
+
+variable "cache_ttl_seconds" {
+  description = "How long a cached weather+insight response stays fresh in DynamoDB before the next request re-fetches from NWS/Bedrock."
+  type        = number
+  default     = 600
+}
+
+variable "nws_user_agent" {
+  description = "User-Agent header sent to api.weather.gov. NWS asks for a descriptive value identifying the app, ideally with a way to reach the maintainer - no API key is required, but requests without a reasonable User-Agent can be rate-limited more aggressively."
+  type        = string
+  default     = "weather-ai-app (https://github.com/amberdeneal-builds/weather-ai-app)"
 }

@@ -1,11 +1,14 @@
 # Least-privilege execution role for the Weather AI Lambda function.
 #
 # Every statement below is scoped to a specific resource ARN rather than "*",
-# with two exceptions that AWS itself requires to be broad:
-#   - the ENI lifecycle actions needed to run Lambda inside a VPC at all
-#   - kms:Decrypt/DescribeKey, where "*" here is safe because the *key's own
-#     policy* (kms.tf) is what actually restricts usage to this role — the
-#     account only has this one CMK the role is meant to touch.
+# with one exception that AWS itself requires to be broad: kms:Decrypt/
+# DescribeKey, where "*" here is safe because the *key's own policy*
+# (kms.tf) is what actually restricts usage to this role - the account only
+# has this one CMK the role is meant to touch.
+#
+# No VPC ENI permissions here: the function isn't VPC-attached (see the
+# comment at the top of lambda.tf), so it never needs ec2:CreateNetworkInterface
+# and friends.
 
 data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
@@ -72,18 +75,50 @@ data "aws_iam_policy_document" "lambda_exec_policy" {
     ]
   }
 
-  # Bedrock — invoke exactly one foundation model, nothing account-wide
-  # (no bedrock:*, no access to other models, no fine-tuning/agent APIs).
+  # Bedrock — invoke exactly one model, nothing account-wide (no bedrock:*,
+  # no access to other models, no fine-tuning/agent APIs). This needs two
+  # statements because bedrock_model_id is a cross-Region inference profile,
+  # not a bare foundation model (Claude Haiku 4.5 isn't offered for direct
+  # in-region invocation in us-east-1 - only through a Geo/Global profile).
+  # AWS checks IAM permission on *both* the profile ARN the caller names
+  # and the foundation-model ARN in whichever region the profile actually
+  # routes the request to, so both need a statement - see the AWS ML blog
+  # "Securing Amazon Bedrock cross-Region inference" for the pattern this
+  # follows.
   statement {
-    sid    = "InvokePrimaryModelOnly"
+    sid    = "InvokeViaInferenceProfileOnly"
     effect = "Allow"
     actions = [
       "bedrock:InvokeModel",
       "bedrock:InvokeModelWithResponseStream",
     ]
     resources = [
-      "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}::foundation-model/${var.bedrock_model_id}",
+      "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
     ]
+  }
+
+  statement {
+    sid    = "InvokePrimaryModelViaProfileOnly"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+    resources = [
+      for region in var.bedrock_profile_destination_regions :
+      "arn:${data.aws_partition.current.partition}:bedrock:${region}::foundation-model/${var.bedrock_foundation_model_id}"
+    ]
+
+    # Without this, the role could invoke the foundation model directly in
+    # any of those regions, bypassing the profile entirely - this pins that
+    # grant to only fire as part of a call through our one named profile.
+    condition {
+      test     = "StringEquals"
+      variable = "bedrock:InferenceProfileArn"
+      values = [
+        "arn:${data.aws_partition.current.partition}:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
+      ]
+    }
   }
 
   # Secrets Manager — read-only, and only secrets under this project's
@@ -108,22 +143,6 @@ data "aws_iam_policy_document" "lambda_exec_policy" {
     actions = [
       "kms:Decrypt",
       "kms:DescribeKey",
-    ]
-    resources = ["*"]
-  }
-
-  # ENI lifecycle — required for any Lambda function attached to a VPC.
-  # AWS does not support resource-level restriction on these four actions,
-  # so this is the one intentionally broad statement in this policy.
-  statement {
-    sid    = "VpcEniLifecycle"
-    effect = "Allow"
-    actions = [
-      "ec2:CreateNetworkInterface",
-      "ec2:DescribeNetworkInterfaces",
-      "ec2:DeleteNetworkInterface",
-      "ec2:AssignPrivateIpAddresses",
-      "ec2:UnassignPrivateIpAddresses",
     ]
     resources = ["*"]
   }

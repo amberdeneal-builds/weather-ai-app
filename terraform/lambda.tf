@@ -1,7 +1,15 @@
-# Minimal Lambda: proves the IAM role (iam.tf), VPC networking (vpc.tf),
-# and DynamoDB table (dynamodb.tf) actually work together end to end,
-# before any real weather-fetching or Bedrock AI-insight logic is layered
-# on top. See src/handler.py for what it actually does.
+# Minimal-turned-real Lambda: proves the IAM role (iam.tf) and DynamoDB
+# table (dynamodb.tf) work together, and now does the actual weather-fetch
+# + Bedrock AI-insight work. See src/handler.py.
+#
+# Not VPC-attached. DynamoDB, Secrets Manager, KMS, and Bedrock are all
+# regional AWS APIs reachable over their public endpoints via IAM alone -
+# VPC attachment only matters for reaching resources that live *inside* a
+# VPC (e.g. RDS in a private subnet), which this function never does. It
+# also needs to reach the public internet (the NWS weather API), which the
+# private-subnet-only VPC built in vpc.tf deliberately has no route to.
+# That VPC/endpoint layer is kept as-is - a real, working lesson from Weeks
+# 1-4 - it's just not what this function runs in.
 
 data "archive_file" "lambda_zip" {
   type        = "zip"
@@ -12,10 +20,7 @@ data "archive_file" "lambda_zip" {
 resource "aws_cloudwatch_log_group" "lambda" {
   # Created explicitly (rather than left for Lambda to create on first
   # invoke) so retention is bounded from day one - an unbounded log group
-  # is a quiet, easy-to-forget cost leak. Note this only fills with data if
-  # enable_interface_endpoints or enable_lambda_logs_endpoint is true - a
-  # VPC-attached Lambda has no route to CloudWatch Logs without one of the
-  # two (see the enable_lambda_logs_endpoint comment in variables.tf).
+  # is a quiet, easy-to-forget cost leak.
   name              = "/aws/lambda/${var.lambda_function_name}"
   retention_in_days = 14
 
@@ -33,17 +38,15 @@ resource "aws_lambda_function" "api" {
 
   handler     = "handler.lambda_handler"
   runtime     = "python3.13"
-  timeout     = 10
+  timeout     = 30 # up from 10: up to 4 sequential NWS calls plus one Bedrock call
   memory_size = 128
-
-  vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
-    security_group_ids = [aws_security_group.lambda.id]
-  }
 
   environment {
     variables = {
-      TABLE_NAME = aws_dynamodb_table.cache.name
+      TABLE_NAME        = aws_dynamodb_table.cache.name
+      BEDROCK_MODEL_ID  = var.bedrock_model_id
+      CACHE_TTL_SECONDS = tostring(var.cache_ttl_seconds)
+      NWS_USER_AGENT    = var.nws_user_agent
     }
   }
 
