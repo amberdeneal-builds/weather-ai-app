@@ -116,7 +116,7 @@ resource "aws_security_group_rule" "lambda_egress_to_interface_endpoints" {
   to_port                  = 443
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.vpc_endpoints.id
-  description               = "HTTPS to interface VPC endpoints (KMS, Secrets Manager, Logs, Bedrock)"
+  description              = "HTTPS to interface VPC endpoints (KMS, Secrets Manager, Logs, Bedrock)"
 }
 
 resource "aws_security_group_rule" "lambda_egress_to_dynamodb_gateway" {
@@ -149,7 +149,7 @@ resource "aws_security_group_rule" "vpc_endpoints_ingress_from_lambda" {
   to_port                  = 443
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.lambda.id
-  description               = "HTTPS from the Lambda SG"
+  description              = "HTTPS from the Lambda SG"
 }
 
 resource "aws_security_group_rule" "vpc_endpoints_egress_all" {
