@@ -122,3 +122,15 @@ variable "gcp_vertex_model_id" {
   type        = string
   default     = "gemini-2.5-flash"
 }
+
+variable "http_api_name" {
+  description = "Name of the API Gateway HTTP API. Matches the name already assigned when it was created by hand in the console (Sept 2, 2026) - kept as its own variable rather than reusing lambda_function_name so the two aren't accidentally coupled just because they happen to share a value today."
+  type        = string
+  default     = "weather-ai-api"
+}
+
+variable "api_custom_domain_name" {
+  description = "Custom domain the HTTP API is mapped to. DNS for this domain lives in Cloudflare, not Route 53 (see the project doc) - Terraform only reads the existing ACM certificate for it and wires up the AWS-side domain name + mapping."
+  type        = string
+  default     = "api.amberdeneal.dev"
+}

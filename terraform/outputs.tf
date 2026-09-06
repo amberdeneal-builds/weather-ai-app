@@ -55,3 +55,22 @@ output "lambda_log_group_name" {
   description = "Empty of log data unless enable_interface_endpoints or enable_lambda_logs_endpoint is true."
   value       = aws_cloudwatch_log_group.lambda.name
 }
+
+output "http_api_id" {
+  value = aws_apigatewayv2_api.this.id
+}
+
+output "http_api_endpoint" {
+  description = "The default execute-api endpoint (bypasses the custom domain). Useful for testing if the custom domain or DNS is ever in question."
+  value       = aws_apigatewayv2_api.this.api_endpoint
+}
+
+output "custom_domain_target" {
+  description = "The regional target this custom domain resolves to - this is what the Cloudflare CNAME for api.amberdeneal.dev must point at."
+  value       = aws_apigatewayv2_domain_name.api.domain_name_configuration[0].target_domain_name
+}
+
+output "acm_certificate_arn" {
+  description = "The existing ACM certificate the custom domain uses (looked up by domain name, not created by Terraform)."
+  value       = data.aws_acm_certificate.api.arn
+}
