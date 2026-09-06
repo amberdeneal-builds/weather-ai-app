@@ -11,10 +11,42 @@
 # That VPC/endpoint layer is kept as-is - a real, working lesson from Weeks
 # 1-4 - it's just not what this function runs in.
 
+# The deploy package now needs more than one file: handler.py plus the
+# vendored google-auth/requests libraries the Vertex AI failover path needs
+# (see src/requirements.txt - both are pure Python, no compiled/platform-
+# specific extensions, so `pip install --target` produces the same files
+# whether it's run on a Mac or Linux, and they work as-is on Lambda's Linux
+# runtime with no cross-compilation step needed).
+#
+# archive_file only zips what's already on disk - it can't run pip itself -
+# so terraform_data's local-exec provisioner builds .build/package first
+# (wiping and reinstalling deps, then copying in the current handler.py),
+# and archive_file depends_on that so it always zips a freshly-built
+# directory. terraform_data is core Terraform (available since 1.4), not a
+# separate provider - no new plugin to download for this.
+resource "terraform_data" "lambda_deps" {
+  triggers_replace = [
+    filesha256("${path.module}/../src/handler.py"),
+    filesha256("${path.module}/../src/requirements.txt"),
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -euo pipefail
+      rm -rf "${path.module}/.build/package"
+      mkdir -p "${path.module}/.build/package"
+      pip3 install --target "${path.module}/.build/package" -r "${path.module}/../src/requirements.txt"
+      cp "${path.module}/../src/handler.py" "${path.module}/.build/package/handler.py"
+    EOT
+  }
+}
+
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../src/handler.py"
+  source_dir  = "${path.module}/.build/package"
   output_path = "${path.module}/.build/lambda.zip"
+
+  depends_on = [terraform_data.lambda_deps]
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
@@ -43,10 +75,14 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cache.name
-      BEDROCK_MODEL_ID  = var.bedrock_model_id
-      CACHE_TTL_SECONDS = tostring(var.cache_ttl_seconds)
-      NWS_USER_AGENT    = var.nws_user_agent
+      TABLE_NAME             = aws_dynamodb_table.cache.name
+      BEDROCK_MODEL_ID       = var.bedrock_model_id
+      CACHE_TTL_SECONDS      = tostring(var.cache_ttl_seconds)
+      NWS_USER_AGENT         = var.nws_user_agent
+      GCP_PROJECT_ID         = var.gcp_project_id
+      GCP_VERTEX_LOCATION    = var.gcp_vertex_location
+      GCP_VERTEX_MODEL_ID    = var.gcp_vertex_model_id
+      GCP_VERTEX_SECRET_NAME = aws_secretsmanager_secret.gcp_vertex_failover_key.name
     }
   }
 

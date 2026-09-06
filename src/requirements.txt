@@ -1,0 +1,7 @@
+# Vendored into the Lambda deploy package (see terraform/lambda.tf) for the
+# GCP Vertex AI failover path. Both are pure-Python - no compiled/platform-
+# specific extensions - so `pip install --target` works identically on any
+# machine (Mac, Linux, whatever runs `terraform apply`) and the result runs
+# fine on Lambda's Linux runtime without cross-compilation.
+google-auth==2.35.0
+requests==2.32.3

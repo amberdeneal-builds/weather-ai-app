@@ -99,3 +99,26 @@ variable "nws_user_agent" {
   type        = string
   default     = "weather-ai-app (https://github.com/amberdeneal-builds/weather-ai-app)"
 }
+
+variable "gcp_project_id" {
+  description = "GCP project ID that owns the Vertex AI failover service account. Informational (used only in a resource description) - not passed to any AWS or Google API call from Terraform itself."
+  type        = string
+  default     = "weather-ai-507817"
+}
+
+variable "gcp_vertex_key_path" {
+  description = "Local filesystem path to the GCP service account JSON key (weather-ai-vertex-failover) used for Vertex AI failover. Never committed - lives outside the repo entirely and is only referenced from the gitignored terraform.tfvars. Supports \"~\" (expanded via pathexpand()). Required - no default, since every machine that runs terraform apply needs its own copy of the key file at whatever path it actually lives at there."
+  type        = string
+}
+
+variable "gcp_vertex_location" {
+  description = "GCP region for Vertex AI failover calls (the Gemini model must be available there). us-central1 is the most broadly available Vertex AI region for Gemini models."
+  type        = string
+  default     = "us-central1"
+}
+
+variable "gcp_vertex_model_id" {
+  description = "Gemini model ID invoked on Vertex AI as the Bedrock failover. Google's Gemini model lineup moves fast (see the Bedrock Claude 3.5 Haiku EOL gotcha from Sept 6, 2026 for what happens when a model ID goes stale) - if Vertex calls start failing with a not-found-style error, check docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions for the current model ID and bump this."
+  type        = string
+  default     = "gemini-2.5-flash"
+}

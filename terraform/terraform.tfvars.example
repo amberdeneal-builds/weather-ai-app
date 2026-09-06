@@ -31,3 +31,13 @@ bedrock_profile_destination_regions = ["us-east-1", "us-east-2", "us-west-1", "u
 secrets_name_prefix  = "weather-ai/"
 
 kms_key_deletion_window_days = 7
+
+
+# GCP Vertex AI failover (see terraform/secrets.tf). Never point this at a
+# path inside the repo - the key file must never be committed. Generate it
+# with: gcloud iam service-accounts keys create ~/gcp-vertex-key.json \
+#   --iam-account=weather-ai-vertex-failover@<your-gcp-project-id>.iam.gserviceaccount.com
+gcp_project_id       = "your-gcp-project-id"
+gcp_vertex_key_path  = "~/gcp-vertex-key.json"
+gcp_vertex_location  = "us-central1"
+gcp_vertex_model_id  = "gemini-2.5-flash"
