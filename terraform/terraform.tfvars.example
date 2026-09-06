@@ -41,3 +41,10 @@ gcp_project_id       = "your-gcp-project-id"
 gcp_vertex_key_path  = "~/gcp-vertex-key.json"
 gcp_vertex_location  = "us-central1"
 gcp_vertex_model_id  = "gemini-2.5-flash"
+
+# Monthly AWS spend ceiling (USD) for the budget alert in budgets.tf.
+# monthly_budget_usd = 10
+
+# Where AWS Budgets sends threshold alerts. Required - no default, and
+# deliberately not committed (this repo is public).
+budget_alert_email = "you@example.com"

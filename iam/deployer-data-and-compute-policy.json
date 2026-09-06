@@ -4,26 +4,58 @@
     {
       "Sid": "KmsKeysAndAliases",
       "Effect": "Allow",
-      "Action": ["kms:CreateAlias","kms:CreateKey","kms:DeleteAlias","kms:Describe*","kms:GenerateRandom","kms:Get*","kms:List*","kms:TagResource","kms:UntagResource"],
+      "Action": [
+        "kms:CreateAlias",
+        "kms:CreateKey",
+        "kms:DeleteAlias",
+        "kms:Describe*",
+        "kms:GenerateRandom",
+        "kms:Get*",
+        "kms:List*",
+        "kms:TagResource",
+        "kms:UntagResource"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "DynamoDbAndRelatedServices",
       "Effect": "Allow",
       "Action": [
-        "dynamodb:*","dax:*",
-        "application-autoscaling:DeleteScalingPolicy","application-autoscaling:DeregisterScalableTarget",
-        "application-autoscaling:DescribeScalableTargets","application-autoscaling:DescribeScalingActivities",
-        "application-autoscaling:DescribeScalingPolicies","application-autoscaling:PutScalingPolicy",
+        "dynamodb:*",
+        "dax:*",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingActivities",
+        "application-autoscaling:DescribeScalingPolicies",
+        "application-autoscaling:PutScalingPolicy",
         "application-autoscaling:RegisterScalableTarget",
-        "datapipeline:ActivatePipeline","datapipeline:CreatePipeline","datapipeline:DeletePipeline",
-        "datapipeline:DescribeObjects","datapipeline:DescribePipelines","datapipeline:GetPipelineDefinition",
-        "datapipeline:ListPipelines","datapipeline:PutPipelineDefinition","datapipeline:QueryObjects",
-        "sns:CreateTopic","sns:DeleteTopic","sns:ListSubscriptions","sns:ListSubscriptionsByTopic",
-        "sns:ListTopics","sns:Subscribe","sns:Unsubscribe","sns:SetTopicAttributes",
-        "resource-groups:ListGroups","resource-groups:ListGroupResources","resource-groups:GetGroup",
-        "resource-groups:GetGroupQuery","resource-groups:DeleteGroup","resource-groups:CreateGroup",
-        "kinesis:ListStreams","kinesis:DescribeStream","kinesis:DescribeStreamSummary"
+        "datapipeline:ActivatePipeline",
+        "datapipeline:CreatePipeline",
+        "datapipeline:DeletePipeline",
+        "datapipeline:DescribeObjects",
+        "datapipeline:DescribePipelines",
+        "datapipeline:GetPipelineDefinition",
+        "datapipeline:ListPipelines",
+        "datapipeline:PutPipelineDefinition",
+        "datapipeline:QueryObjects",
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:ListSubscriptions",
+        "sns:ListSubscriptionsByTopic",
+        "sns:ListTopics",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:SetTopicAttributes",
+        "resource-groups:ListGroups",
+        "resource-groups:ListGroupResources",
+        "resource-groups:GetGroup",
+        "resource-groups:GetGroupQuery",
+        "resource-groups:DeleteGroup",
+        "resource-groups:CreateGroup",
+        "kinesis:ListStreams",
+        "kinesis:DescribeStream",
+        "kinesis:DescribeStreamSummary"
       ],
       "Resource": "*"
     },
@@ -37,11 +69,20 @@
       "Sid": "CloudWatchLogsAndMetrics",
       "Effect": "Allow",
       "Action": [
-        "logs:*","cloudwatch:DeleteAlarms","cloudwatch:DescribeAlarmHistory","cloudwatch:DescribeAlarms",
-        "cloudwatch:DescribeAlarmsForMetric","cloudwatch:GetMetricStatistics","cloudwatch:ListMetrics",
-        "cloudwatch:PutMetricAlarm","cloudwatch:GetMetricData","cloudwatch:GenerateQuery",
-        "cloudwatch:GenerateQueryResultsSummary","observabilityadmin:GetS3TableIntegration",
-        "observabilityadmin:ListS3TableIntegrations","observabilityadmin:ListTelemetryPipelines"
+        "logs:*",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarmHistory",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmsForMetric",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GenerateQuery",
+        "cloudwatch:GenerateQueryResultsSummary",
+        "observabilityadmin:GetS3TableIntegration",
+        "observabilityadmin:ListS3TableIntegrations",
+        "observabilityadmin:ListTelemetryPipelines"
       ],
       "Resource": "*"
     },
@@ -49,10 +90,18 @@
       "Sid": "LambdaAndRelated",
       "Effect": "Allow",
       "Action": [
-        "lambda:*","cloudformation:DescribeStacks","cloudformation:ListStackResources",
-        "cloudformation:CreateChangeSet","cloudformation:DescribeChangeSet","cloudformation:DescribeStackResource",
-        "cloudformation:ExecuteChangeSet","states:DescribeStateMachine","states:ListStateMachines",
-        "tag:GetResources","xray:GetTraceSummaries","xray:BatchGetTraces"
+        "lambda:*",
+        "cloudformation:DescribeStacks",
+        "cloudformation:ListStackResources",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:ExecuteChangeSet",
+        "states:DescribeStateMachine",
+        "states:ListStateMachines",
+        "tag:GetResources",
+        "xray:GetTraceSummaries",
+        "xray:BatchGetTraces"
       ],
       "Resource": "*"
     },
@@ -61,6 +110,23 @@
       "Effect": "Allow",
       "Action": "apigateway:*",
       "Resource": "arn:aws:apigateway:*::/*"
+    },
+    {
+      "Sid": "BudgetsManagement",
+      "Effect": "Allow",
+      "Action": "budgets:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CostExplorerReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast",
+        "ce:GetDimensionValues",
+        "ce:GetTags"
+      ],
+      "Resource": "*"
     }
   ]
 }

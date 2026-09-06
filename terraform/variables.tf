@@ -134,3 +134,14 @@ variable "api_custom_domain_name" {
   type        = string
   default     = "api.amberdeneal.dev"
 }
+
+variable "monthly_budget_usd" {
+  description = "Monthly AWS spend ceiling (USD) that the budget alert thresholds are measured against. Set well above the account's reviewed run-rate (~$4/month uncredited as of August 2026, and most of that was an unrelated course EC2 instance plus an interface endpoint that has since been turned off - see the cost breakdown in budgets.tf), so crossing a threshold means something actually changed rather than normal variation. This is an account-wide budget, not scoped to this project's resources."
+  type        = number
+  default     = 10
+}
+
+variable "budget_alert_email" {
+  description = "Email address AWS Budgets sends threshold alerts to. Required, with no default, and set only in the gitignored terraform.tfvars - this repo is public, and a personal email address committed to a public repo is a standing invitation for scraping. Same reasoning as gcp_vertex_key_path: the value is personal to whoever runs this, so it doesn't belong in version control."
+  type        = string
+}
