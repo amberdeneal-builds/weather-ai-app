@@ -70,7 +70,6 @@ locals {
   interface_endpoint_services = merge(
     var.enable_interface_endpoints ? {
       kms             = "kms"
-      secretsmanager  = "secretsmanager"
       logs            = "logs"
       bedrock_runtime = "bedrock-runtime"
     } : {},

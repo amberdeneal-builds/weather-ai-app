@@ -76,12 +76,6 @@ variable "bedrock_profile_destination_regions" {
   default     = ["us-east-1", "us-east-2", "us-west-1", "us-west-2"]
 }
 
-variable "secrets_name_prefix" {
-  description = "Name prefix for Secrets Manager secrets the Lambda role may read (e.g. the GCP Vertex AI failover credential). A prefix, not a fixed name, so multiple related secrets can share one IAM statement."
-  type        = string
-  default     = "weather-ai/"
-}
-
 variable "kms_key_deletion_window_days" {
   description = "Waiting period before a deleted KMS key is actually destroyed. AWS minimum/default is 30; keep it short in dev, longer in prod."
   type        = number
@@ -104,11 +98,6 @@ variable "gcp_project_id" {
   description = "GCP project ID that owns the Vertex AI failover service account. Informational (used only in a resource description) - not passed to any AWS or Google API call from Terraform itself."
   type        = string
   default     = "weather-ai-507817"
-}
-
-variable "gcp_vertex_key_path" {
-  description = "Local filesystem path to the GCP service account JSON key (weather-ai-vertex-failover) used for Vertex AI failover. Never committed - lives outside the repo entirely and is only referenced from the gitignored terraform.tfvars. Supports \"~\" (expanded via pathexpand()). Required - no default, since every machine that runs terraform apply needs its own copy of the key file at whatever path it actually lives at there."
-  type        = string
 }
 
 variable "gcp_vertex_location" {
@@ -142,6 +131,18 @@ variable "monthly_budget_usd" {
 }
 
 variable "budget_alert_email" {
-  description = "Email address AWS Budgets sends threshold alerts to. Required, with no default, and set only in the gitignored terraform.tfvars - this repo is public, and a personal email address committed to a public repo is a standing invitation for scraping. Same reasoning as gcp_vertex_key_path: the value is personal to whoever runs this, so it doesn't belong in version control."
+  description = "Email address AWS Budgets sends threshold alerts to. Required, with no default, and set only in the gitignored terraform.tfvars - this repo is public, and a personal email address committed to a public repo is a standing invitation for scraping. The value is personal to whoever runs this, so it doesn't belong in version control."
   type        = string
+}
+
+variable "gcp_wif_pool_id" {
+  description = "Workload identity pool ID on the GCP side that trusts this AWS account. 4-32 chars, lowercase letters/digits/hyphens. Changing it replaces the pool - and GCP soft-deletes pool IDs for 30 days, so a deleted ID cannot be reused immediately."
+  type        = string
+  default     = "weather-ai-aws"
+}
+
+variable "gcp_wif_provider_id" {
+  description = "Workload identity pool *provider* ID for the Lambda execution role. Same character rules and same 30-day soft-delete caveat as the pool ID."
+  type        = string
+  default     = "aws-lambda"
 }

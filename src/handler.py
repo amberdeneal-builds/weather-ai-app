@@ -21,8 +21,8 @@ from decimal import Decimal
 
 import boto3
 from botocore.exceptions import ClientError
+from google.auth import aws as google_auth_aws
 from google.auth.transport.requests import Request as GoogleAuthRequest
-from google.oauth2 import service_account
 
 TABLE_NAME = os.environ["TABLE_NAME"]
 BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
@@ -35,12 +35,15 @@ NWS_USER_AGENT = os.environ.get(
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 GCP_VERTEX_LOCATION = os.environ.get("GCP_VERTEX_LOCATION", "us-central1")
 GCP_VERTEX_MODEL_ID = os.environ.get("GCP_VERTEX_MODEL_ID", "gemini-2.5-flash")
-GCP_VERTEX_SECRET_NAME = os.environ.get("GCP_VERTEX_SECRET_NAME", "weather-ai/gcp-vertex-failover-key")
+# Workload Identity Federation - the Lambda's own AWS execution role is the
+# identity GCP trusts. There is no key and no secret to read.
+GCP_PROJECT_NUMBER = os.environ.get("GCP_PROJECT_NUMBER")
+GCP_WIF_POOL_ID = os.environ.get("GCP_WIF_POOL_ID")
+GCP_WIF_PROVIDER_ID = os.environ.get("GCP_WIF_PROVIDER_ID")
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 bedrock = boto3.client("bedrock-runtime")
-secrets_client = boto3.client("secretsmanager")
 
 # Cached across warm Lambda invocations so a GCP service-account credential
 # (and its signed access token) isn't re-fetched/re-signed on every request -
@@ -129,15 +132,52 @@ def get_current_conditions(lat, lon):
 
 
 def _get_gcp_access_token():
-    """Fetch (once) and refresh (as needed) the GCP service-account credential
-    used for Vertex AI. Reads the key JSON from Secrets Manager the first time
-    a Vertex call is actually needed - never on the Bedrock-succeeds happy path."""
+    """Mint (once) and refresh (as needed) a short-lived GCP access token via
+    Workload Identity Federation. No key material is involved: google-auth
+    signs an AWS STS GetCallerIdentity request with this Lambda's own
+    execution-role credentials, GCP verifies that signature against the
+    workload identity pool, and returns a token that expires on its own.
+
+    google-auth reads the AWS credentials and region from the AWS_* environment
+    variables Lambda already sets, before it ever tries the EC2 metadata
+    service - which Lambda does not have. See google/auth/aws.py,
+    get_aws_security_credentials() and get_aws_region()."""
     global _gcp_credentials
     if _gcp_credentials is None:
-        secret = secrets_client.get_secret_value(SecretId=GCP_VERTEX_SECRET_NAME)
-        sa_info = json.loads(secret["SecretString"])
-        _gcp_credentials = service_account.Credentials.from_service_account_info(
-            sa_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        missing = [
+            name
+            for name, value in (
+                ("GCP_PROJECT_NUMBER", GCP_PROJECT_NUMBER),
+                ("GCP_WIF_POOL_ID", GCP_WIF_POOL_ID),
+                ("GCP_WIF_PROVIDER_ID", GCP_WIF_PROVIDER_ID),
+            )
+            if not value
+        ]
+        if missing:
+            raise UpstreamError(
+                "Vertex AI failover is not configured: missing " + ", ".join(missing)
+            )
+        audience = (
+            "//iam.googleapis.com/projects/{number}/locations/global"
+            "/workloadIdentityPools/{pool}/providers/{provider}"
+        ).format(
+            number=GCP_PROJECT_NUMBER, pool=GCP_WIF_POOL_ID, provider=GCP_WIF_PROVIDER_ID
+        )
+        _gcp_credentials = google_auth_aws.Credentials.from_info(
+            {
+                "type": "external_account",
+                "audience": audience,
+                "subject_token_type": "urn:ietf:params:aws:token-type:aws4_request",
+                "token_url": "https://sts.googleapis.com/v1/token",
+                "credential_source": {
+                    "environment_id": "aws1",
+                    "regional_cred_verification_url": (
+                        "https://sts.{region}.amazonaws.com"
+                        "?Action=GetCallerIdentity&Version=2011-06-15"
+                    ),
+                },
+            },
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
     if not _gcp_credentials.valid:
         _gcp_credentials.refresh(GoogleAuthRequest())

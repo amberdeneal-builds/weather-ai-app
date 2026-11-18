@@ -11,6 +11,14 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    # Manages the Workload Identity Federation pool/provider on the GCP side
+    # (see wif.tf). Authenticates with your own user credentials via
+    # `gcloud auth application-default login` - deliberately not a service
+    # account key, which is the thing this whole change exists to remove.
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.0"
+    }
   }
 
   # No remote backend yet — state is local for this lab. Before this is used
@@ -32,6 +40,11 @@ provider "aws" {
   default_tags {
     tags = local.common_tags
   }
+}
+
+provider "google" {
+  project = var.gcp_project_id
+  region  = var.gcp_vertex_location
 }
 
 data "aws_caller_identity" "current" {}

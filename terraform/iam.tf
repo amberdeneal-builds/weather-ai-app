@@ -121,31 +121,10 @@ data "aws_iam_policy_document" "lambda_exec_policy" {
     }
   }
 
-  # Secrets Manager — read-only, and only secrets under this project's
-  # name prefix (e.g. weather-ai/gcp-vertex-failover-key).
-  statement {
-    sid    = "ReadOwnSecretsOnly"
-    effect = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue",
-    ]
-    resources = [
-      "arn:${data.aws_partition.current.partition}:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.secrets_name_prefix}*",
-    ]
-  }
-
-  # KMS — decrypt only. Scoped for real by the key policy in kms.tf, which
-  # names this exact role; "*" here just means "whichever key(s) grant me
-  # access", and today that's the one CMK this module creates.
-  statement {
-    sid    = "DecryptWithProjectKey"
-    effect = "Allow"
-    actions = [
-      "kms:Decrypt",
-      "kms:DescribeKey",
-    ]
-    resources = ["*"]
-  }
+  # No KMS statement. The only thing this role ever decrypted was the GCP
+  # service-account key in Secrets Manager, and Workload Identity Federation
+  # retired that secret — so the kms:Decrypt grant went with it rather than
+  # sitting here on resources = ["*"] with nothing to decrypt.
 }
 
 resource "aws_iam_role_policy" "lambda_exec" {

@@ -11,8 +11,8 @@
      AI (Gemini 2.5 Flash) instead** — see below.
   4. Caches the combined result and returns it as JSON.
 
-  Not VPC-attached — DynamoDB, Bedrock, and Secrets Manager are all regional
-  AWS APIs reachable via IAM alone, and this function also needs the public
+  Not VPC-attached — DynamoDB and Bedrock are regional AWS APIs reachable via
+  IAM alone, and this function also needs the public
   internet (NWS and `*.googleapis.com`), which the private-subnet VPC in
   `terraform/vpc.tf` deliberately has no route to. See the comment at the top
   of `terraform/lambda.tf` for the full reasoning.
@@ -28,10 +28,12 @@
 `get_ai_insight()` calls Bedrock first. On any `ClientError` it logs the reason
 and falls through to `_invoke_vertex()`, which:
 
-1. Reads the GCP service-account key from Secrets Manager (cached at module
-   scope, so a warm container doesn't re-fetch it).
-2. Mints a short-lived OAuth2 access token via `google.oauth2.service_account`,
-   refreshing only when the cached token has actually expired.
+1. Builds external-account credentials with `google.auth.aws` (cached at module
+   scope, so a warm container doesn't rebuild them). There is no key to read —
+   the whole credential config is three environment variables plus the Lambda's
+   own AWS identity.
+2. Exchanges a signed AWS STS `GetCallerIdentity` request for a short-lived GCP
+   access token, refreshing only when the cached token has actually expired.
 3. POSTs to Vertex AI's `generateContent` REST endpoint with `urllib.request`.
 
 There's no `google-cloud-aiplatform` SDK dependency — the REST call is a few
@@ -46,10 +48,13 @@ Each path logs which provider served the request (`ai_insight served by:
 bedrock` / `ai_insight served by: vertex (bedrock failover)`), which is what
 makes the failover verifiable in CloudWatch rather than merely plausible.
 
-**Known gap:** authentication to Vertex AI currently uses a long-lived
-service-account key. Migrating to Workload Identity Federation — short-lived
-tokens exchanged from the Lambda's own AWS identity, no stored credential — is
-the next planned change here.
+**Why this works on Lambda at all.** `google-auth` would normally read the AWS
+credentials it needs to sign that STS request from the EC2 metadata service, which
+Lambda doesn't have. Before trying metadata, it checks `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `AWS_REGION` — all of which Lambda
+sets on every invocation. That fallback order is the entire reason this needs no
+shim, and it's the first thing to know when debugging a federation setup that
+behaves differently locally than it does in Lambda.
 
 ## A DynamoDB gotcha baked into this file
 

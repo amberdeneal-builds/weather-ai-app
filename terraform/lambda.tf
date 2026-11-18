@@ -82,7 +82,9 @@ resource "aws_lambda_function" "api" {
       GCP_PROJECT_ID         = var.gcp_project_id
       GCP_VERTEX_LOCATION    = var.gcp_vertex_location
       GCP_VERTEX_MODEL_ID    = var.gcp_vertex_model_id
-      GCP_VERTEX_SECRET_NAME = aws_secretsmanager_secret.gcp_vertex_failover_key.name
+      GCP_PROJECT_NUMBER     = data.google_project.this.number
+      GCP_WIF_POOL_ID        = google_iam_workload_identity_pool.aws.workload_identity_pool_id
+      GCP_WIF_PROVIDER_ID    = google_iam_workload_identity_pool_provider.aws_lambda.workload_identity_pool_provider_id
     }
   }
 

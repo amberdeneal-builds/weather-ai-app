@@ -48,7 +48,7 @@ https://claude.ai/code/artifact/e45f8211-c509-499f-99ac-07f522351aa4
 | Weather data | National Weather Service | Free, no API key, US-only |
 | AI (primary) | Bedrock — Claude Haiku 4.5 | Via the `us.` cross-Region inference profile |
 | AI (failover) | Vertex AI — Gemini 2.5 Flash | Direct REST call; no Cloud Run in front of it |
-| Secrets | Secrets Manager + customer-managed KMS key | Rotation enabled |
+| Cross-cloud auth | Workload Identity Federation | No stored key — the Lambda's AWS role *is* the identity |
 | DNS | Cloudflare — registrar **and** DNS host | Not Route 53, and there's a reason |
 
 ---
@@ -66,8 +66,8 @@ endpoints. That's a genuinely good design — right up until the function needed
 can't reach it at all.
 
 So the choice was a NAT gateway at roughly **$32/month** for a portfolio app, or
-dropping the VPC attachment. DynamoDB, Bedrock, Secrets Manager and KMS are all
-regional AWS APIs reachable through IAM alone, and this function never touches
+dropping the VPC attachment. DynamoDB and Bedrock are regional AWS APIs reachable
+through IAM alone, and this function never touches
 anything living *inside* a VPC — so the attachment was buying nothing real. Dropping
 it also let the execution role shed its ENI permissions and made a **~$7/month**
 CloudWatch Logs interface endpoint unnecessary.
@@ -108,6 +108,37 @@ off. Terraform reads the existing certificate as a data source but manages no DN
 
 Not the original plan. A real constraint, handled.
 
+### Why there's no GCP key anywhere
+
+The Vertex AI failover has to authenticate to a different cloud, and the obvious way
+to do that is a service-account JSON key: generate it in GCP, store it in Secrets
+Manager, read it at failover time. That's how this started, and it worked. But a
+service-account key doesn't expire on its own, and anything that can read the secret
+can reach the GCP project. It's a standing credential whose entire job is to sit
+there and stay valid.
+
+Workload Identity Federation removes it. The Lambda's own AWS execution role *is* the
+identity now: `google-auth` signs an AWS STS `GetCallerIdentity` request, GCP verifies
+that signature against a workload identity pool, and hands back an access token good
+for an hour. Nothing is generated, stored, rotated, or deleted, because no key exists.
+
+Two details make it work:
+
+- **The trust is scoped to one role, not one account.** `attribute_condition` in
+  `terraform/wif.tf` checks the AWS account ID *and* that the caller is
+  `weather-ai-dev-lambda-exec` specifically, so no other role in the account can mint
+  a Vertex token even by accident. The GCP grant goes to a `principalSet://` for that
+  one role — there's deliberately no service account left in the middle to impersonate.
+- **It works on Lambda because of an ordering detail in `google-auth`.** The library
+  normally reads AWS credentials from the EC2 metadata service, which Lambda doesn't
+  have. Before trying metadata, it checks `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+  `AWS_SESSION_TOKEN` and `AWS_REGION` — all of which Lambda sets on every invocation.
+  That fallback order is what makes this work with no shim of my own.
+
+Verified rather than assumed: a cold start that lost Bedrock logged `ai_insight served
+by: vertex (bedrock failover)` on a build whose code has no Secrets Manager call path
+at all. The old secret, its KMS decrypt grant, and the service account are all gone.
+
 ---
 
 ## Repo structure
@@ -120,8 +151,8 @@ Not the original plan. A real constraint, handled.
 ├── src/
 │   ├── handler.py        # weather fetch + AI insight + caching
 │   └── requirements.txt  # google-auth, requests — pure-Python, vendored into the zip
-└── terraform/    # everything AWS-side: IAM role, VPC, KMS, DynamoDB, Secrets
-                  # Manager, Lambda, API Gateway, Budgets. See terraform/README.md.
+└── terraform/    # everything AWS-side: IAM role, VPC, KMS, DynamoDB, Lambda,
+                  # API Gateway, WIF, Budgets. See terraform/README.md.
 ```
 
 ---
@@ -131,8 +162,9 @@ Not the original plan. A real constraint, handled.
 About **$4/month account-wide** before free-tier credits — and most of that isn't
 even this project. The two largest line items in August were an unrelated EC2 test
 instance and a CloudWatch Logs interface endpoint that's since been switched off.
-This app's own footprint is genuinely pennies: KMS and Secrets Manager together came
-to **under a cent**.
+This app's own footprint is genuinely pennies: in August, KMS and Secrets Manager
+together came to **under a cent** — and Secrets Manager has since been removed
+altogether, because the key it held no longer exists.
 
 The guardrails are both architectural and alert-based:
 
@@ -156,12 +188,6 @@ resources cost nothing," and they are not the same sentence.
 Stating these plainly, because a gap you've named is a roadmap item and a gap you
 haven't is a surprise.
 
-- **Cross-cloud auth uses a long-lived service-account key.** The Vertex AI failover
-  authenticates with a GCP service-account JSON key held in Secrets Manager. It's
-  KMS-encrypted and never touches the repo, but it's still a standing credential.
-  Migrating to **Workload Identity Federation** — so the Lambda's own AWS identity
-  exchanges for short-lived GCP tokens and the key can be deleted outright — is the
-  next planned change.
 - No front-end yet; S3 + CloudFront for the static site is still ahead.
 - No CI/CD pipeline yet (GitHub Actions running `pytest`, lint, and `terraform plan`
   on push is planned).

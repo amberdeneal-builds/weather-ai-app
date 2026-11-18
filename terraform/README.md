@@ -1,7 +1,7 @@
 # terraform/ — Weather AI infrastructure
 
 Everything AWS-side for Weather AI: the account structure (IAM, VPC, KMS), the
-data and compute layer (DynamoDB, Secrets Manager, Lambda), the public API
+data and compute layer (DynamoDB, Lambda), the public API
 (API Gateway HTTP API + custom domain), and cost guardrails.
 
 DNS is *not* here — `amberdeneal.dev` lives entirely on Cloudflare (see the root
@@ -14,9 +14,9 @@ but manages no DNS records.
 |---|---|---|
 | `iam.tf` | `aws_iam_role.lambda_exec` + inline policy | Least-privilege Lambda execution role |
 | `vpc.tf` | VPC, 2 private subnets, route table, VPC endpoints, 2 security groups, 1 NACL | Network layer — **no longer what the Lambda runs in**, see below |
-| `kms.tf` | `aws_kms_key.secrets` + alias + key policy | CMK for Secrets Manager, rotation enabled |
+| `kms.tf` | `aws_kms_key.secrets` + alias + key policy | CMK with rotation enabled — **nothing encrypts with it now**, see below |
 | `dynamodb.tf` | `aws_dynamodb_table.cache` | On-demand cache table with TTL |
-| `secrets.tf` | Secrets Manager secret + version | Holds the GCP service-account key for the Vertex AI failover |
+| `wif.tf` | Workload identity pool, AWS provider, `roles/aiplatform.user` binding | Lets the Lambda's AWS role reach Vertex AI with no stored key |
 | `lambda.tf` | `aws_lambda_function.api`, log group, `terraform_data` build step | The function itself, plus the vendored-dependency packaging |
 | `apigateway.tf` | HTTP API, integration, route, `$default` stage, Lambda permission, custom domain, API mapping | The public API — imported, not created (see below) |
 | `budgets.tf` | `aws_budgets_budget.monthly_cost` | Account-wide spend alerts, actual + forecasted |
@@ -25,11 +25,12 @@ but manages no DNS records.
 ## Design notes
 
 **IAM role.** Every statement is scoped to a specific resource ARN — the
-function's own log group, the cache table, the Bedrock inference profile and its
-underlying foundation models, secrets under a project-specific name prefix —
-rather than `*`. `kms:Decrypt`/`DescribeKey` is the one broad statement, and the
-real restriction lives on the other side of that relationship: the KMS key's own
-policy in `kms.tf` names this role specifically.
+function's own log group, the cache table, and the Bedrock inference profile with
+its underlying foundation models — rather than `*`. There is no `kms:*` or
+`secretsmanager:*` statement at all any more. Both existed only to read the GCP
+service-account key, and Workload Identity Federation retired that secret, so the
+grants went with it rather than sitting on `resources = ["*"]` with nothing left
+to decrypt.
 
 Bedrock needs **two** statements rather than one, because Claude Haiku 4.5 is
 reachable in `us-east-1` only through a cross-Region inference profile. AWS
@@ -38,6 +39,14 @@ ARN in whichever region the profile routes to, so `InvokeViaInferenceProfileOnly
 grants the profile and `InvokePrimaryModelViaProfileOnly` grants the model across
 all four destination regions — scoped by a `bedrock:InferenceProfileArn`
 condition, so the model can't be invoked directly and bypass the profile.
+
+**Cross-cloud auth.** `wif.tf` is what lets the Vertex AI failover authenticate
+without a stored credential. The workload identity pool trusts exactly one AWS
+account, and the provider's `attribute_condition` narrows that further to a single
+role — the Lambda's own execution role. `roles/aiplatform.user` is granted to a
+`principalSet://` for that role rather than to a service account, so there is
+nothing in GCP left to impersonate. This is the only GCP-side resource Terraform
+manages here, and the `hashicorp/google` provider in `versions.tf` exists for it.
 
 **VPC — deployed, correct, and not in the request path.** Private-subnet-only, no
 NAT gateway, no internet gateway, AWS services reached through VPC endpoints. The
@@ -85,9 +94,11 @@ those endpoints would be pure waste. When on, they run ~$0.01/hr each.
 
 Everything else here is effectively free at this scale: the VPC, subnets, security
 groups, NACL, IAM role, DynamoDB gateway endpoint, on-demand DynamoDB, and the
-Lambda itself. The KMS key and the Secrets Manager secret carry small fixed
-monthly charges. Measured August run-rate for the whole account, before free-tier
-credits, was ~$4 — and most of that was an unrelated EC2 instance.
+Lambda itself. The KMS key carries a small fixed monthly charge and is now the one
+thing here paying for nothing — the Secrets Manager secret it encrypted is gone, so
+the CMK is a deletion candidate rather than a cost of doing business. Measured
+August run-rate for the whole account, before free-tier credits, was ~$4 — and most
+of that was an unrelated EC2 instance.
 
 ## Usage
 
@@ -99,13 +110,9 @@ terraform plan
 terraform apply
 ```
 
-Two variables have **no default** and must be set in `terraform.tfvars`, which is
+One variable has **no default** and must be set in `terraform.tfvars`, which is
 gitignored:
 
-- `gcp_vertex_key_path` — path to the GCP service-account JSON key on the machine
-  running Terraform. The file lives outside the repo entirely; Terraform reads its
-  contents into Secrets Manager via `sensitive(file(pathexpand(...)))`, so the key
-  never appears in plan output or git history.
 - `budget_alert_email` — where AWS Budgets sends threshold alerts. Kept out of the
   repo because this repo is public and committed email addresses get scraped.
 
@@ -116,9 +123,6 @@ state isn't managing its own storage.
 
 ## Not yet in this module
 
-- **Workload Identity Federation.** The Vertex AI failover authenticates with a
-  long-lived service-account key held in Secrets Manager. Replacing it with
-  federated short-lived tokens — and deleting the key — is the next planned change.
 - S3 + CloudFront for the static front-end
 - A CI/CD pipeline (GitHub Actions: `pytest`, lint, `terraform plan` on push)
 - A remote Terraform backend
